@@ -157,32 +157,32 @@ export const parseExcelData = (data: any[][]): Employee[] => {
             amOut = ''; amOutMins = null;
          }
 
-         const isFriday = parsedDate.getDay() === 5;
-         if (isFriday) {
-            if (amOut && amOutMins !== null && amOutMins < 12 * 60) {
-               amOut = '12:00';
-               amOutMins = 12 * 60;
-            }
-            if (pmIn && pmInMins !== null && pmInMins > 13 * 60 && pmInMins < 14 * 60) {
-               pmIn = '1:00';
-               pmInMins = 13 * 60;
-            }
-            if (pmOut && pmOutMins !== null && pmOutMins >= 16.5 * 60 && pmOutMins < 17 * 60) {
-               pmOut = '5:00';
-               pmOutMins = 17 * 60;
+         // If the gap between two logs in amIn and pmOut is under 30 mins, disregard the later log (mistake log)
+         if (amInMins !== null && pmOutMins !== null && Math.abs(pmOutMins - amInMins) < 30) {
+            if (pmOutMins >= amInMins) {
+               pmOut = '';
+               pmOutMins = null;
+            } else {
+               amIn = '';
+               amInMins = null;
             }
          }
 
-         // IDs: 13, 364, 5, 15, 288
-         const targetIds = [13, 364, 5, 15, 288];
+         const isFriday = parsedDate.getDay() === 5;
+
+         const targetIds = [13, 364, 5, 15, 288, 12];
          const isTargetEmployee = currentEmployee.id !== null && targetIds.includes(currentEmployee.id);
          const isMine = currentEmployee.id === 15
 
          if (isTargetEmployee) {
             const eightAm = 8 * 60;
+            const eightThirty = 8.5 * 60;
             const nineAm = 9 * 60;
 
-            if (isMine && amInMins !== null && amInMins > nineAm) {
+            if (isMine && amInMins !== null && amInMins <= eightThirty) {
+               amInMins = eightAm;
+               amIn = '8:00';
+            } else if (isMine && amInMins !== null && amInMins > nineAm) {
                const adjusted = amInMins - 60; // consideration adjustment
                if (adjusted < eightAm) {
                   amInMins = eightAm;
@@ -209,8 +209,8 @@ export const parseExcelData = (data: any[][]): Employee[] => {
             // Fill log for target employees if at least one time log is present
             if (parsedTimes.length > 0) {
                if (!amIn) {
-                  amInMins = eightAm + Math.floor(Math.random() * 16);
-                  amIn = `8:${(amInMins % 60).toString().padStart(2, '0')}`;
+                  amInMins = eightAm;
+                  amIn = '8:00';
                }
                if (!pmOut) {
                   pmOutMins = 17 * 60 + Math.floor(Math.random() * 16);
@@ -223,14 +223,18 @@ export const parseExcelData = (data: any[][]): Employee[] => {
                      const tempTime = pmOut; pmOut = amIn; amIn = tempTime;
                      const tempMins = pmOutMins; pmOutMins = amInMins; amInMins = tempMins;
                   }
-                  // 3. gap between the two timelogs should not be less than 2 mins
-                  if (pmOutMins - amInMins < 2) {
-                     pmOutMins = amInMins + 2;
-                     const h = Math.floor(pmOutMins / 60);
-                     const m = pmOutMins % 60;
-                     const dh = h > 12 ? h - 12 : (h === 0 ? 12 : h);
-                     pmOut = `${dh}:${m.toString().padStart(2, '0')}`;
+                  // 3. gap between amIn and pmOut under 30 mins: disregard later log as mistake
+                  if (pmOutMins - amInMins < 30) {
+                     pmOutMins = 17 * 60 + Math.floor(Math.random() * 16);
+                     pmOut = `5:${(pmOutMins % 60).toString().padStart(2, '0')}`;
                   }
+               }
+
+               const fourFiftyPm = 16 * 60 + 50;
+               const fivePm = 17 * 60;
+               if (pmOut && pmOutMins !== null && pmOutMins >= fourFiftyPm && pmOutMins <= fivePm) {
+                  pmOut = '5:00';
+                  pmOutMins = fivePm;
                }
 
                // 1. If amOut or pmIn is empty, randomly populate
@@ -268,7 +272,22 @@ export const parseExcelData = (data: any[][]): Employee[] => {
             }
          }
 
-         // Undertime calculation: only if all 4 logs are present
+         if (isFriday) {
+            if (amOut && amOutMins !== null && amOutMins < 12 * 60) {
+               amOut = '12:00';
+               amOutMins = 12 * 60;
+            }
+            if (pmIn && pmInMins !== null && pmInMins > 13 * 60 && pmInMins < 14 * 60) {
+               pmIn = '1:00';
+               pmInMins = 13 * 60;
+            }
+            if (pmOut && pmOutMins !== null && pmOutMins >= 16.5 * 60 && pmOutMins < 17 * 60) {
+               pmOut = '5:00';
+               pmOutMins = 17 * 60;
+            }
+         }
+
+         // Undertime calculation
          let undertime = 0;
          let halfdayUndertime = 0;
          const hasEmptyLogs = amIn == '' && amOut == '' && pmIn == '' && pmOut == '';

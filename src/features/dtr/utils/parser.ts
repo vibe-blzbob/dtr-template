@@ -1,4 +1,5 @@
 import { isValid, format, getDate } from 'date-fns';
+import { getShiftByEmployeeId, SHIFT_SCHEDULES } from './shifts';
 
 export interface EmployeeLog {
    day: number;
@@ -133,6 +134,10 @@ export const parseExcelData = (data: any[][]): Employee[] => {
 
          parsedTimes.sort((a, b) => (a?.totalMinutes || 0) - (b?.totalMinutes || 0));
 
+         const shift = getShiftByEmployeeId(currentEmployee.id);
+         const isAfternoonShift = shift.type === 'afternoon';
+         const isNightShift = shift.type === 'night';
+
          parsedTimes.forEach(pt => {
             if (!pt) return;
             const tm = pt.totalMinutes;
@@ -140,25 +145,63 @@ export const parseExcelData = (data: any[][]): Employee[] => {
             if (amInMins !== null && tm >= amInMins && tm - amInMins < 10) {
                return;
             }
-            if (tm < 10.5 * 60) { // Before 10:30 AM
-               if (!amIn) { amIn = pt.time; amInMins = tm; }
-               else if (!amOut) { amOut = pt.time; amOutMins = tm; }
-            } else if (tm >= 11.5 * 60 && tm <= 14 * 60) { // 11:30 PM to 2:00 PM
-               if (!amOut) { amOut = pt.time; amOutMins = tm; }
-               else if (!pmIn) { pmIn = pt.time; pmInMins = tm; }
-            } else if (tm > 12 * 60 && tm <= 14 * 60) { // 12:00 PM to 2:00 PM
-               if (!pmIn) { pmIn = pt.time; pmInMins = tm; }
-               else if (!pmOut) { pmOut = pt.time; pmOutMins = tm; }
-            } else { // After 1:00 PM
-               if (!pmOut) { pmOut = pt.time; pmOutMins = tm; }
-               else if (!pmIn) { pmIn = pmOut; pmInMins = pmOutMins; pmOut = pt.time; pmOutMins = tm; }
+
+            if (isAfternoonShift) {
+               // Afternoon Shift: amIn 3:00 PM (15:00), amOut 7:00 PM (19:00), pmIn 8:00 PM (20:00), pmOut 11:00 PM (23:00)
+               if (tm < 17.5 * 60) { // Before 5:30 PM (around 3:00 PM)
+                  if (!amIn) { amIn = pt.time; amInMins = tm; }
+                  else if (!amOut) { amOut = pt.time; amOutMins = tm; }
+               } else if (tm >= 17.5 * 60 && tm <= 19.5 * 60) { // 5:30 PM to 7:30 PM (around 7:00 PM)
+                  if (!amOut) { amOut = pt.time; amOutMins = tm; }
+                  else if (!pmIn) { pmIn = pt.time; pmInMins = tm; }
+               } else if (tm > 19.5 * 60 && tm <= 21.5 * 60) { // 7:30 PM to 9:30 PM (around 8:00 PM)
+                  if (!pmIn) { pmIn = pt.time; pmInMins = tm; }
+                  else if (!pmOut) { pmOut = pt.time; pmOutMins = tm; }
+               } else { // After 9:30 PM (around 11:00 PM)
+                  if (!pmOut) { pmOut = pt.time; pmOutMins = tm; }
+                  else if (!pmIn) { pmIn = pmOut; pmInMins = pmOutMins; pmOut = pt.time; pmOutMins = tm; }
+               }
+            } else if (isNightShift) {
+               // Night Shift: amIn 11:00 PM (23:00), amOut 3:00 AM (03:00), pmIn 4:00 AM (04:00), pmOut 7:00 AM/PM
+               if (tm >= 21 * 60) { // 9:00 PM to midnight (around 11:00 PM) -> amIn
+                  if (!amIn) { amIn = pt.time; amInMins = tm; }
+               } else if (tm < 3.5 * 60) { // Up to 3:30 AM (around 3:00 AM) -> amOut
+                  if (!amOut) { amOut = pt.time; amOutMins = tm; }
+               } else if (tm >= 3.5 * 60 && tm < 5.5 * 60) { // 3:30 AM to 5:30 AM (around 4:00 AM) -> pmIn
+                  if (!pmIn) { pmIn = pt.time; pmInMins = tm; }
+               } else { // 5:30 AM onwards (around 7:00 AM or 7:00 PM) -> pmOut
+                  if (!pmOut) { pmOut = pt.time; pmOutMins = tm; }
+               }
+            } else {
+               // Normal Shift: amIn 8:00 AM, amOut 12:00 PM, pmIn 1:00 PM, pmOut 5:00 PM
+               if (tm < 10.5 * 60) { // Before 10:30 AM
+                  if (!amIn) { amIn = pt.time; amInMins = tm; }
+                  else if (!amOut) { amOut = pt.time; amOutMins = tm; }
+               } else if (tm >= 11.5 * 60 && tm <= 14 * 60) { // 11:30 PM to 2:00 PM
+                  if (!amOut) { amOut = pt.time; amOutMins = tm; }
+                  else if (!pmIn) { pmIn = pt.time; pmInMins = tm; }
+               } else if (tm > 12 * 60 && tm <= 14 * 60) { // 12:00 PM to 2:00 PM
+                  if (!pmIn) { pmIn = pt.time; pmInMins = tm; }
+                  else if (!pmOut) { pmOut = pt.time; pmOutMins = tm; }
+               } else { // After 1:00 PM
+                  if (!pmOut) { pmOut = pt.time; pmOutMins = tm; }
+                  else if (!pmIn) { pmIn = pmOut; pmInMins = pmOutMins; pmOut = pt.time; pmOutMins = tm; }
+               }
             }
          });
 
-         // A lone lunch log after 1:00 PM is a late arrival, not a departure
-         if (!pmIn && amOutMins !== null && amOutMins > 13 * 60) {
-            pmIn = amOut; pmInMins = amOutMins;
-            amOut = ''; amOutMins = null;
+         if (!isAfternoonShift && !isNightShift) {
+            // A lone lunch log after 1:00 PM is a late arrival, not a departure
+            if (!pmIn && amOutMins !== null && amOutMins > 13 * 60) {
+               pmIn = amOut; pmInMins = amOutMins;
+               amOut = ''; amOutMins = null;
+            }
+         } else if (isAfternoonShift) {
+            // A lone dinner log after 8:00 PM is a late arrival, not a departure
+            if (!pmIn && amOutMins !== null && amOutMins > 20 * 60) {
+               pmIn = amOut; pmInMins = amOutMins;
+               amOut = ''; amOutMins = null;
+            }
          }
 
          // If the gap between two logs in amIn and pmOut is under 30 mins, disregard the later log (mistake log)
@@ -260,6 +303,36 @@ export const parseExcelData = (data: any[][]): Employee[] => {
                   pmInMins = pmTotal;
                }
             }
+         } else if (isAfternoonShift) {
+            const threePm = 15 * 60;
+            if (amInMins !== null && amInMins > threePm) {
+               const adjusted = amInMins - 30; // consideration adjustment
+               if (adjusted < threePm) {
+                  amInMins = threePm;
+                  amIn = '3:00';
+               } else {
+                  amInMins = adjusted;
+                  const h = Math.floor(adjusted / 60);
+                  const dh = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+                  const m = adjusted % 60;
+                  amIn = `${dh}:${m.toString().padStart(2, '0')}`;
+               }
+            }
+         } else if (isNightShift) {
+            const elevenPm = 23 * 60;
+            if (amInMins !== null && amInMins > elevenPm) {
+               const adjusted = amInMins - 30; // consideration adjustment
+               if (adjusted < elevenPm) {
+                  amInMins = elevenPm;
+                  amIn = '11:00';
+               } else {
+                  amInMins = adjusted;
+                  const h = Math.floor(adjusted / 60);
+                  const dh = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+                  const m = adjusted % 60;
+                  amIn = `${dh}:${m.toString().padStart(2, '0')}`;
+               }
+            }
          } else {
             const eightAm = 8 * 60;
             if (amInMins !== null && amInMins > eightAm) {
@@ -276,7 +349,7 @@ export const parseExcelData = (data: any[][]): Employee[] => {
             }
          }
 
-         if (isFriday) {
+         if (isFriday && !isAfternoonShift && !isNightShift) {
             if (amOut && amOutMins !== null && amOutMins < 12 * 60) {
                amOut = '12:00';
                amOutMins = 12 * 60;
@@ -308,6 +381,42 @@ export const parseExcelData = (data: any[][]): Employee[] => {
             if (hasEmptyLogs) {
                undertime = 480;
                halfdayUndertime = 240;
+            } else if (isAfternoonShift) {
+               // Afternoon Shift: amIn 3:00 PM (15:00), amOut 7:00 PM (19:00), pmIn 8:00 PM (20:00), pmOut 11:00 PM (23:00)
+               const noAmIn = !amIn && !!amOut;
+               const lateMinutes = noAmIn ? 240 : (amInMins !== null && amInMins > 15 * 60)
+                  ? amInMins - 15 * 60
+                  : 0;
+
+               const noPmOut = !pmOut;
+               const earlyOutMinutes = noPmOut ? 180 : (pmOutMins !== null && pmOutMins < 23 * 60)
+                  ? 23 * 60 - pmOutMins
+                  : 0;
+
+               const dinnerMinutes = !amOut && !pmIn ? 240 :
+                  (!noAmIn && amOutMins !== null ? Math.max(0, 19 * 60 - amOutMins) : 0) +
+                  (!noPmOut && pmInMins !== null ? Math.max(0, pmInMins - 20 * 60) : 0);
+
+               undertime = Math.min(480, lateMinutes + earlyOutMinutes + dinnerMinutes);
+               halfdayUndertime = !amIn ? 240 : lateMinutes + (hdOutMins >= 0 ? Math.max(0, 19 * 60 - hdOutMins) : 0);
+            } else if (isNightShift) {
+               // Night Shift: amIn 11:00 PM (23:00), amOut 3:00 AM (03:00), pmIn 4:00 AM (04:00), pmOut 7:00 AM/PM
+               const noAmIn = !amIn && !!amOut;
+               const lateMinutes = noAmIn ? 240 : (amInMins !== null && amInMins > 23 * 60)
+                  ? amInMins - 23 * 60
+                  : 0;
+
+               const noPmOut = !pmOut;
+               const earlyOutMinutes = noPmOut ? 180 : (pmOutMins !== null && pmOutMins < 7 * 60)
+                  ? 7 * 60 - pmOutMins
+                  : 0;
+
+               const breakMinutes = !amOut && !pmIn ? 240 :
+                  (!noAmIn && amOutMins !== null && amOutMins < 3 * 60 ? 3 * 60 - amOutMins : 0) +
+                  (!noPmOut && pmInMins !== null && pmInMins > 4 * 60 && pmInMins < 21 * 60 ? pmInMins - 4 * 60 : 0);
+
+               undertime = Math.min(480, lateMinutes + earlyOutMinutes + breakMinutes);
+               halfdayUndertime = !amIn ? 240 : lateMinutes + (hdOutMins >= 0 && hdOutMins < 3 * 60 ? 3 * 60 - hdOutMins : 0);
             } else {
                // 1. If amIn is later than 08:00, take the difference in minutes.
                //    No amIn but amOut present = whole morning (240) missing.
@@ -348,6 +457,47 @@ export const parseExcelData = (data: any[][]): Employee[] => {
          };
       }
    }
+
+   // Post-processing: For night shift employees, bridge morning departures from day N+1 into day N if logged across calendar days
+   employees.forEach(emp => {
+      if (emp.id !== null && SHIFT_SCHEDULES.night.employeeIds.includes(emp.id)) {
+         const days = Object.keys(emp.logs).map(Number).sort((a, b) => a - b);
+         for (let d = 0; d < days.length - 1; d++) {
+            const currentDay = days[d];
+            const nextDay = days[d + 1];
+            if (nextDay !== currentDay + 1) continue;
+
+            const curLog = emp.logs[currentDay];
+            const nextLog = emp.logs[nextDay];
+
+            if (curLog.amIn && !curLog.pmOut && (nextLog.amOut || nextLog.pmIn || nextLog.pmOut)) {
+               if (!curLog.amOut && nextLog.amOut) {
+                  curLog.amOut = nextLog.amOut;
+                  nextLog.amOut = '';
+               }
+               if (!curLog.pmIn && nextLog.pmIn) {
+                  curLog.pmIn = nextLog.pmIn;
+                  nextLog.pmIn = '';
+               }
+               if (!curLog.pmOut && nextLog.pmOut) {
+                  curLog.pmOut = nextLog.pmOut;
+                  nextLog.pmOut = '';
+               }
+               const curAmInM = parseTime(curLog.amIn)?.totalMinutes ?? null;
+               const curPmOutM = parseTime(curLog.pmOut)?.totalMinutes ?? null;
+               const curAmOutM = parseTime(curLog.amOut)?.totalMinutes ?? null;
+               const curPmInM = parseTime(curLog.pmIn)?.totalMinutes ?? null;
+
+               const lateM = (curAmInM !== null && curAmInM > 23 * 60) ? curAmInM - 23 * 60 : 0;
+               const earlyOutM = (curPmOutM !== null && curPmOutM < 7 * 60) ? 7 * 60 - curPmOutM : 0;
+               const brkM = (curAmOutM !== null && curAmOutM < 3 * 60 ? 3 * 60 - curAmOutM : 0) +
+                  (curPmInM !== null && curPmInM > 4 * 60 && curPmInM < 21 * 60 ? curPmInM - 4 * 60 : 0);
+               const tot = Math.min(480, lateM + earlyOutM + brkM);
+               curLog.undertime = tot > 0 ? tot : undefined;
+            }
+         }
+      }
+   });
 
    // Filter out empty employees
    return employees.filter(emp => Object.keys(emp.logs).length > 0);

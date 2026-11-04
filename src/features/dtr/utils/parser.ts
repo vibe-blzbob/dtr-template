@@ -136,6 +136,10 @@ export const parseExcelData = (data: any[][]): Employee[] => {
          parsedTimes.forEach(pt => {
             if (!pt) return;
             const tm = pt.totalMinutes;
+            // Disregard succeeding time logs on amIn that have less than 10 mins interval from the first one
+            if (amInMins !== null && tm >= amInMins && tm - amInMins < 10) {
+               return;
+            }
             if (tm < 10.5 * 60) { // Before 10:30 AM
                if (!amIn) { amIn = pt.time; amInMins = tm; }
                else if (!amOut) { amOut = pt.time; amOutMins = tm; }

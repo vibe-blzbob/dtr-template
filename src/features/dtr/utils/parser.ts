@@ -312,8 +312,10 @@ export const parseExcelData = (data: any[][]): Employee[] => {
                   ? amInMins - 8 * 60
                   : 0;
 
-               // 2. If pmOut is earlier than expected, take the difference in minutes
-               const earlyOutMinutes = (pmOutMins !== null && pmOutMins < expectedPmOut)
+               // 2. If pmOut is earlier than expected, take the difference in minutes.
+               //    No pmOut for non-target employees = afternoon (240) missing.
+               const noPmOut = !isTargetEmployee && !pmOut;
+               const earlyOutMinutes = noPmOut ? 240 : (pmOutMins !== null && pmOutMins < expectedPmOut)
                   ? expectedPmOut - pmOutMins
                   : 0;
 
@@ -321,9 +323,9 @@ export const parseExcelData = (data: any[][]): Employee[] => {
                //    (amOut early is skipped when the morning is already counted as 240)
                const lunchMinutes = !amOut && !pmIn ? 240 :
                   (!noAmIn && amOutMins !== null ? Math.max(0, 12 * 60 - amOutMins) : 0) +
-                  (pmInMins !== null ? Math.max(0, pmInMins - 13 * 60) : 0);
+                  (!noPmOut && pmInMins !== null ? Math.max(0, pmInMins - 13 * 60) : 0);
 
-               undertime = lateMinutes + earlyOutMinutes + lunchMinutes;
+               undertime = Math.min(480, lateMinutes + earlyOutMinutes + lunchMinutes);
 
                // Halfday: late amIn + departure before 12:00, afternoon ignored; no amIn = whole halfday
                halfdayUndertime = !amIn ? 240 : lateMinutes + (hdOutMins >= 0 ? Math.max(0, 12 * 60 - hdOutMins) : 0);

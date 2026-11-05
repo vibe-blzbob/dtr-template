@@ -141,8 +141,9 @@ export const parseExcelData = (data: any[][]): Employee[] => {
          parsedTimes.forEach(pt => {
             if (!pt) return;
             const tm = pt.totalMinutes;
-            // Disregard succeeding time logs on amIn that have less than 10 mins interval from the first one
-            if (amInMins !== null && tm >= amInMins && tm - amInMins < 10) {
+            // Disregard succeeding time logs on amIn that have less than 30 mins interval from the first one
+            const isNightLunch = isNightShift && tm >= 2.5 * 60 && tm <= 4.5 * 60;
+            if (!isNightLunch && amInMins !== null && tm >= amInMins && tm - amInMins < 30) {
                return;
             }
 
@@ -165,10 +166,9 @@ export const parseExcelData = (data: any[][]): Employee[] => {
                // Night Shift: amIn 11:00 PM (23:00), amOut 3:00 AM (03:00), pmIn 4:00 AM (04:00), pmOut 7:00 AM/PM
                if (tm >= 21 * 60) { // 9:00 PM to midnight (around 11:00 PM) -> amIn
                   if (!amIn) { amIn = pt.time; amInMins = tm; }
-               } else if (tm < 3.5 * 60) { // Up to 3:30 AM (around 3:00 AM) -> amOut
+               } else if (tm < 5.5 * 60) { // Lunch break window (3:00 AM - 4:00 AM)
                   if (!amOut) { amOut = pt.time; amOutMins = tm; }
-               } else if (tm >= 3.5 * 60 && tm < 5.5 * 60) { // 3:30 AM to 5:30 AM (around 4:00 AM) -> pmIn
-                  if (!pmIn) { pmIn = pt.time; pmInMins = tm; }
+                  else if (!pmIn) { pmIn = pt.time; pmInMins = tm; }
                } else { // 5:30 AM onwards (around 7:00 AM or 7:00 PM) -> pmOut
                   if (!pmOut) { pmOut = pt.time; pmOutMins = tm; }
                }
@@ -199,6 +199,12 @@ export const parseExcelData = (data: any[][]): Employee[] => {
          } else if (isAfternoonShift) {
             // A lone dinner log after 8:00 PM is a late arrival, not a departure
             if (!pmIn && amOutMins !== null && amOutMins > 20 * 60) {
+               pmIn = amOut; pmInMins = amOutMins;
+               amOut = ''; amOutMins = null;
+            }
+         } else if (isNightShift) {
+            // A lone lunch log after 3:30 AM is a late arrival / return, not a departure
+            if (!pmIn && amOutMins !== null && amOutMins > 3.5 * 60) {
                pmIn = amOut; pmInMins = amOutMins;
                amOut = ''; amOutMins = null;
             }

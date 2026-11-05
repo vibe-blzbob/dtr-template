@@ -348,7 +348,7 @@ export const DtrUploader = () => {
 
       {/* Print Preview Area */}
       {employees.length > 0 ? (
-        <div className="bg-white dark:bg-gray-800 mx-auto print:mx-0 rounded-lg shadow-sm print:shadow-none p-8 print:p-0 max-w-[8.5in] w-full overflow-hidden transition-colors">
+        <div className="bg-white dark:bg-gray-800 mx-auto print:mx-0 rounded-lg shadow-sm print:shadow-none p-8 print:p-0 max-w-[8.5in] w-full overflow-hidden print:overflow-visible transition-colors">
           {printPages.map((pair, index) => (
             <div
               key={index}
@@ -379,9 +379,11 @@ export const DtrUploader = () => {
 
       <style>{`
         @media print {
-          @page { size: letter portrait ; margin: 10mm; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; }
+          @page { size: letter portrait; margin: 10mm; }
+          html, body, #root { background-color: white !important; overflow: visible !important; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .page-break-after-always { page-break-after: always; break-after: page; }
+          .page-break-after-always:last-child { page-break-after: auto !important; break-after: auto !important; }
           .ut-summary-modal { display: none !important; }
           .holiday-picker-modal { display: none !important; }
         }

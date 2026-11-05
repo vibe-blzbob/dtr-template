@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -42,9 +42,18 @@ app.whenReady().then(() => {
   ipcMain.handle('print', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     try {
-      win.webContents.print({ silent: false, printBackground: true });
+      const pdfData = await win.webContents.printToPDF({
+        printBackground: true,
+        pageSize: 'Letter',
+        preferCSSPageSize: true,
+        margins: { marginType: 'none' },
+      });
+      const tempPath = path.join(app.getPath('temp'), `dtr-print-${Date.now()}.pdf`);
+      fs.writeFileSync(tempPath, pdfData);
+      await shell.openPath(tempPath);
       return { success: true };
     } catch (error) {
+      console.error('Failed to print:', error);
       return { success: false, error: error.message };
     }
   });
@@ -63,8 +72,11 @@ app.whenReady().then(() => {
       const pdfData = await win.webContents.printToPDF({
         printBackground: true,
         pageSize: 'Letter',
+        preferCSSPageSize: true,
+        margins: { marginType: 'none' },
       });
       fs.writeFileSync(filePath, pdfData);
+      await shell.openPath(filePath);
       return { success: true, filePath };
     } catch (error) {
       console.error('Failed to print to PDF:', error);

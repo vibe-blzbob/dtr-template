@@ -88,34 +88,7 @@ export const parseExcelData = (data: any[][]): Employee[] => {
          const parsedDate = new Date(dateStr);
          if (!isValid(parsedDate)) continue;
 
-         let day = getDate(parsedDate);
-         const shift = getShiftByEmployeeId(currentEmployee.id);
-         const isAfternoonShift = shift.type === 'afternoon';
-         const isNightShift = shift.type === 'night';
-
-         // For night shift: handle cutoff rows at month boundaries
-         if (isNightShift) {
-            if (day >= 28) {
-               for (let k = i + 1; k < Math.min(i + 5, data.length); k++) {
-                  const cell = data[k]?.[0];
-                  let nd: Date | null = null;
-                  if (cell instanceof Date) nd = cell;
-                  else if (typeof cell === 'number') nd = new Date(Math.round((cell - 25569) * 86400 * 1000));
-                  else if (typeof cell === 'string') {
-                     const m = cell.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
-                     if (m) nd = new Date(m[1]);
-                  }
-                  if (nd && isValid(nd)) {
-                     if (getDate(nd) === 1) day = 0;
-                     break;
-                  }
-               }
-            } else if (day <= 5 && currentEmployee.logs[1]) {
-               // Next month cutoff row (e.g. Nov 1 following the end of current month)
-               const maxDay = Math.max(0, ...Object.keys(currentEmployee.logs).map(Number));
-               day = Math.max(32, maxDay + 1);
-            }
-         }
+         const day = getDate(parsedDate);
 
          // Collect all time logs in this row
          const times: string[] = [];
@@ -160,6 +133,10 @@ export const parseExcelData = (data: any[][]): Employee[] => {
          const parsedTimes = times.map(parseTime).filter(Boolean) as ReturnType<typeof parseTime>[];
 
          parsedTimes.sort((a, b) => (a?.totalMinutes || 0) - (b?.totalMinutes || 0));
+
+         const shift = getShiftByEmployeeId(currentEmployee.id);
+         const isAfternoonShift = shift.type === 'afternoon';
+         const isNightShift = shift.type === 'night';
 
          parsedTimes.forEach(pt => {
             if (!pt) return;
@@ -487,64 +464,43 @@ export const parseExcelData = (data: any[][]): Employee[] => {
       }
    }
 
-   // Post-processing: For night shift employees, each Day D (1..31) starts at evening (amIn) on Day D and adopts morning departures (amOut/pmIn/pmOut) from Day D+1
+   // Post-processing: For night shift employees, bridge morning departures from day N+1 into day N if logged across calendar days
    employees.forEach(emp => {
       if (emp.id !== null && SHIFT_SCHEDULES.night.employeeIds.includes(emp.id)) {
-         // Snapshot original morning departures before bridging
-         const morningLogs: Record<number, { amOut: string; pmIn: string; pmOut: string }> = {};
-         for (const d of Object.keys(emp.logs).map(Number)) {
-            morningLogs[d] = {
-               amOut: emp.logs[d]?.amOut || '',
-               pmIn: emp.logs[d]?.pmIn || '',
-               pmOut: emp.logs[d]?.pmOut || '',
-            };
-         }
+         const days = Object.keys(emp.logs).map(Number).sort((a, b) => a - b);
+         for (let d = 0; d < days.length - 1; d++) {
+            const currentDay = days[d];
+            const nextDay = days[d + 1];
+            if (nextDay !== currentDay + 1) continue;
 
-         for (let d = 1; d <= 31; d++) {
-            const curLog = emp.logs[d];
-            const nextMorning = morningLogs[d + 1];
+            const curLog = emp.logs[currentDay];
+            const nextLog = emp.logs[nextDay];
 
-            if (curLog && (curLog.amIn || nextMorning?.amOut || nextMorning?.pmOut)) {
-               curLog.amOut = nextMorning?.amOut || '';
-               curLog.pmIn = nextMorning?.pmIn || '';
-               curLog.pmOut = nextMorning?.pmOut || '';
-            } else if (curLog && !curLog.amIn) {
-               curLog.amOut = '';
-               curLog.pmIn = '';
-               curLog.pmOut = '';
+            if (curLog.amIn && !curLog.pmOut && (nextLog.amOut || nextLog.pmIn || nextLog.pmOut)) {
+               if (!curLog.amOut && nextLog.amOut) {
+                  curLog.amOut = nextLog.amOut;
+                  nextLog.amOut = '';
+               }
+               if (!curLog.pmIn && nextLog.pmIn) {
+                  curLog.pmIn = nextLog.pmIn;
+                  nextLog.pmIn = '';
+               }
+               if (!curLog.pmOut && nextLog.pmOut) {
+                  curLog.pmOut = nextLog.pmOut;
+                  nextLog.pmOut = '';
+               }
+               const curAmInM = parseTime(curLog.amIn)?.totalMinutes ?? null;
+               const curPmOutM = parseTime(curLog.pmOut)?.totalMinutes ?? null;
+               const curAmOutM = parseTime(curLog.amOut)?.totalMinutes ?? null;
+               const curPmInM = parseTime(curLog.pmIn)?.totalMinutes ?? null;
+
+               const lateM = (curAmInM !== null && curAmInM > 23 * 60) ? curAmInM - 23 * 60 : 0;
+               const earlyOutM = (curPmOutM !== null && curPmOutM < 7 * 60) ? 7 * 60 - curPmOutM : 0;
+               const brkM = (curAmOutM !== null && curAmOutM < 3 * 60 ? 3 * 60 - curAmOutM : 0) +
+                  (curPmInM !== null && curPmInM > 4 * 60 && curPmInM < 21 * 60 ? curPmInM - 4 * 60 : 0);
+               const tot = Math.min(480, lateM + earlyOutM + brkM);
+               curLog.undertime = tot > 0 ? tot : undefined;
             }
-         }
-
-         // Clean up cutoff rows outside the current month (Day 0 and Day > 31)
-         delete emp.logs[0];
-         Object.keys(emp.logs).map(Number).filter(d => d > 31).forEach(d => delete emp.logs[d]);
-
-         // Recalculate undertime for night shift days with the newly aligned logs
-         for (let d = 1; d <= 31; d++) {
-            const curLog = emp.logs[d];
-            if (!curLog) continue;
-
-            if (!curLog.amIn && !curLog.amOut && !curLog.pmIn && !curLog.pmOut) {
-               delete emp.logs[d];
-               continue;
-            }
-
-            const curAmInM = parseTime(curLog.amIn)?.totalMinutes ?? null;
-            const curPmOutM = parseTime(curLog.pmOut)?.totalMinutes ?? null;
-            const curAmOutM = parseTime(curLog.amOut)?.totalMinutes ?? null;
-            const curPmInM = parseTime(curLog.pmIn)?.totalMinutes ?? null;
-
-            const noAmIn = !curLog.amIn && !!curLog.amOut;
-            const lateM = noAmIn ? 240 : (curAmInM !== null && curAmInM > 23 * 60 ? curAmInM - 23 * 60 : 0);
-            const noPmOut = !curLog.pmOut;
-            const earlyOutM = noPmOut ? 180 : (curPmOutM !== null && curPmOutM < 7 * 60 ? 7 * 60 - curPmOutM : 0);
-            const brkM = (!curLog.amOut && !curLog.pmIn) ? 240 :
-               (!noAmIn && curAmOutM !== null && curAmOutM < 3 * 60 ? 3 * 60 - curAmOutM : 0) +
-               (!noPmOut && curPmInM !== null && curPmInM > 4 * 60 && curPmInM < 21 * 60 ? curPmInM - 4 * 60 : 0);
-
-            const tot = Math.min(480, lateM + earlyOutM + brkM);
-            curLog.undertime = tot > 0 ? tot : undefined;
-            curLog.halfdayUndertime = !curLog.amIn ? 240 : lateM + (curAmOutM !== null && curAmOutM >= 0 && curAmOutM < 3 * 60 ? 3 * 60 - curAmOutM : 0);
          }
       }
    });

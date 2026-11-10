@@ -1,4 +1,4 @@
-export type ShiftType = 'normal' | 'afternoon' | 'night';
+export type ShiftType = 'normal' | 'afternoon' | 'night' | 'morning';
 
 export interface ShiftOfficialHours {
   amIn: string;
@@ -64,10 +64,28 @@ export const SHIFT_SCHEDULES: Record<ShiftType, ShiftSchedule> = {
       pmOutMins: 7 * 60,
     },
   },
+  morning: {
+    name: 'Morning Shift',
+    type: 'morning',
+    employeeIds: [307, 308, 309, 310],
+    officialHours: {
+      amIn: '7:00 AM',
+      amInMins: 7 * 60,
+      amOut: '12:00 PM',
+      amOutMins: 12 * 60,
+      pmIn: '1:00 PM',
+      pmInMins: 13 * 60,
+      pmOut: '3:00 PM',
+      pmOutMins: 15 * 60,
+    },
+  },
 };
 
 export function getShiftByEmployeeId(employeeId: number | null): ShiftSchedule {
   if (employeeId !== null) {
+    if (SHIFT_SCHEDULES.morning.employeeIds.includes(employeeId)) {
+      return SHIFT_SCHEDULES.morning;
+    }
     if (SHIFT_SCHEDULES.afternoon.employeeIds.includes(employeeId)) {
       return SHIFT_SCHEDULES.afternoon;
     }

@@ -2,10 +2,10 @@ import React, { useState, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { getDaysInMonth, isSaturday, isSunday } from 'date-fns';
 import { parseExcelData, type Employee } from '../utils/parser';
-import { SIGNATORIES } from '../utils/signatories';
+import { SIGNATORIES, getCustomSignatories, saveCustomSignatories, type Signatory } from '../utils/signatories';
 import { DtrTemplate } from './DtrTemplate';
 import { Button } from '../../../components/Button';
-import { Upload, RefreshCcw, FileDown, ClipboardList, X, CalendarDays } from 'lucide-react';
+import { Upload, RefreshCcw, FileDown, ClipboardList, X, CalendarDays, Plus, Trash2 } from 'lucide-react';
 
 // ─── Holiday Picker Modal ────────────────────────────────────────────────────
 
@@ -125,18 +125,167 @@ const HolidayPickerModal: React.FC<HolidayPickerModalProps> = ({
   );
 };
 
+// ─── Custom Signatory Modal ──────────────────────────────────────────────────
+
+interface CustomSignatoryModalProps {
+  customSignatories: Signatory[];
+  onAdd: (sig: Signatory) => void;
+  onRemove: (index: number) => void;
+  onClose: () => void;
+}
+
+const CustomSignatoryModal: React.FC<CustomSignatoryModalProps> = ({
+  customSignatories,
+  onAdd,
+  onRemove,
+  onClose,
+}) => {
+  const [name, setName] = useState('');
+  const [position, setPosition] = useState('');
+  const [office, setOffice] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !position.trim()) return;
+    onAdd({
+      name: name.trim().toUpperCase(),
+      position: position.trim(),
+      office: office.trim() || position.trim(),
+    });
+    setName('');
+    setPosition('');
+    setOffice('');
+    onClose();
+  };
+
+  return (
+    <div className="custom-signatory-modal fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full flex flex-col overflow-hidden">
+        <div className="flex justify-between items-center p-5 border-b border-gray-200 dark:border-gray-700">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Add Custom Signatory</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Signatory for DTR print certificates</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+          >
+            <X size={24} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase mb-1">
+              Full Name *
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. JUAN P. DELA CRUZ"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md shadow-sm p-2 text-sm border focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase mb-1">
+              Position / Title *
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. Provincial Department Head"
+              value={position}
+              onChange={(e) => setPosition(e.target.value)}
+              className="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md shadow-sm p-2 text-sm border focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase mb-1">
+              Office (Optional)
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Office of the Administrator"
+              value={office}
+              onChange={(e) => setOffice(e.target.value)}
+              className="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md shadow-sm p-2 text-sm border focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={onClose} className="text-xs px-3 py-1.5 dark:border-gray-600 dark:text-gray-300">
+              Cancel
+            </Button>
+            <Button type="submit" className="text-xs px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white">
+              Add Signatory
+            </Button>
+          </div>
+        </form>
+
+        {customSignatories.length > 0 && (
+          <div className="p-5 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 max-h-48 overflow-y-auto">
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">Saved Custom Signatories</p>
+            <div className="space-y-2">
+              {customSignatories.map((sig, idx) => (
+                <div key={idx} className="flex items-center justify-between bg-white dark:bg-gray-800 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs">
+                  <div className="truncate mr-2">
+                    <div className="font-semibold text-gray-800 dark:text-gray-100 truncate">{sig.name}</div>
+                    <div className="text-gray-500 dark:text-gray-400 truncate">{sig.position} {sig.office ? `• ${sig.office}` : ''}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(idx)}
+                    title="Remove custom signatory"
+                    className="text-red-500 hover:text-red-700 dark:text-red-400 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ─── DTR Uploader ────────────────────────────────────────────────────────────
 
 export const DtrUploader = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [month, setMonth] = useState<number>(new Date().getMonth());
+  const [customSignatories, setCustomSignatories] = useState<Signatory[]>(getCustomSignatories);
   const [selectedSignatoryIndex, setSelectedSignatoryIndex] = useState(0); // HRMO default
+  const [showCustomSignatoryModal, setShowCustomSignatoryModal] = useState(false);
   const [showUtSummary, setShowUtSummary] = useState(false);
   const [holidays, setHolidays] = useState<Set<number>>(new Set());
   const [halfdays, setHalfdays] = useState<Set<number>>(new Set());
   const [showHolidayPicker, setShowHolidayPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const allSignatories = useMemo(() => [...SIGNATORIES, ...customSignatories], [customSignatories]);
+
+  const handleAddCustomSignatory = (sig: Signatory) => {
+    const updated = [...customSignatories, sig];
+    setCustomSignatories(updated);
+    saveCustomSignatories(updated);
+    setSelectedSignatoryIndex(SIGNATORIES.length + updated.length - 1);
+  };
+
+  const handleRemoveCustomSignatory = (idx: number) => {
+    const updated = customSignatories.filter((_, i) => i !== idx);
+    setCustomSignatories(updated);
+    saveCustomSignatories(updated);
+    if (selectedSignatoryIndex >= SIGNATORIES.length) {
+      setSelectedSignatoryIndex(0);
+    }
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -286,15 +435,42 @@ export const DtrUploader = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Signatory</label>
+            <div className="flex justify-between items-center mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Signatory</label>
+              <button
+                type="button"
+                onClick={() => setShowCustomSignatoryModal(true)}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <Plus size={12} /> Add Custom
+              </button>
+            </div>
             <select
               value={selectedSignatoryIndex}
-              onChange={(e) => setSelectedSignatoryIndex(Number(e.target.value))}
+              onChange={(e) => {
+                if (e.target.value === 'new') {
+                  setShowCustomSignatoryModal(true);
+                } else {
+                  setSelectedSignatoryIndex(Number(e.target.value));
+                }
+              }}
               className="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500"
             >
-              {SIGNATORIES.map((sig, index) => (
-                <option key={index} value={index}>{sig.name} — {sig.position}</option>
-              ))}
+              <optgroup label="Default Signatories">
+                {SIGNATORIES.map((sig, index) => (
+                  <option key={index} value={index}>{sig.name} — {sig.position}</option>
+                ))}
+              </optgroup>
+              {customSignatories.length > 0 && (
+                <optgroup label="Custom Signatories">
+                  {customSignatories.map((sig, index) => (
+                    <option key={SIGNATORIES.length + index} value={SIGNATORIES.length + index}>
+                      {sig.name} — {sig.position}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              <option value="new">+ Add Custom Signatory...</option>
             </select>
           </div>
 
@@ -302,12 +478,30 @@ export const DtrUploader = () => {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Office</label>
             <select
               value={selectedSignatoryIndex}
-              onChange={(e) => setSelectedSignatoryIndex(Number(e.target.value))}
+              onChange={(e) => {
+                if (e.target.value === 'new') {
+                  setShowCustomSignatoryModal(true);
+                } else {
+                  setSelectedSignatoryIndex(Number(e.target.value));
+                }
+              }}
               className="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500"
             >
-              {SIGNATORIES.map((sig, index) => (
-                <option key={index} value={index}>{sig.office}</option>
-              ))}
+              <optgroup label="Default Offices">
+                {SIGNATORIES.map((sig, index) => (
+                  <option key={index} value={index}>{sig.office}</option>
+                ))}
+              </optgroup>
+              {customSignatories.length > 0 && (
+                <optgroup label="Custom Offices">
+                  {customSignatories.map((sig, index) => (
+                    <option key={SIGNATORIES.length + index} value={SIGNATORIES.length + index}>
+                      {sig.office || sig.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              <option value="new">+ Add Custom Signatory...</option>
             </select>
           </div>
         </div>
@@ -361,8 +555,8 @@ export const DtrUploader = () => {
                   employee={emp}
                   year={year}
                   month={month}
-                  signatoryName={SIGNATORIES[selectedSignatoryIndex].name}
-                  signatoryPosition={SIGNATORIES[selectedSignatoryIndex].position}
+                  signatoryName={allSignatories[selectedSignatoryIndex]?.name || SIGNATORIES[0].name}
+                  signatoryPosition={allSignatories[selectedSignatoryIndex]?.position || SIGNATORIES[0].position}
                   holidays={holidays}
                   halfdays={halfdays}
                 />
@@ -386,6 +580,7 @@ export const DtrUploader = () => {
           .page-break-after-always:last-child { page-break-after: auto !important; break-after: auto !important; }
           .ut-summary-modal { display: none !important; }
           .holiday-picker-modal { display: none !important; }
+          .custom-signatory-modal { display: none !important; }
         }
       `}</style>
 
@@ -468,6 +663,16 @@ export const DtrUploader = () => {
           onToggle={toggleHoliday}
           onClose={() => setShowHolidayPicker(false)}
           onClear={() => { setHolidays(new Set()); setHalfdays(new Set()); }}
+        />
+      )}
+
+      {/* Custom Signatory Modal */}
+      {showCustomSignatoryModal && (
+        <CustomSignatoryModal
+          customSignatories={customSignatories}
+          onAdd={handleAddCustomSignatory}
+          onRemove={handleRemoveCustomSignatory}
+          onClose={() => setShowCustomSignatoryModal(false)}
         />
       )}
     </div>

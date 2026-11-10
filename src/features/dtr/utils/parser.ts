@@ -137,6 +137,7 @@ export const parseExcelData = (data: any[][]): Employee[] => {
          const shift = getShiftByEmployeeId(currentEmployee.id);
          const isAfternoonShift = shift.type === 'afternoon';
          const isNightShift = shift.type === 'night';
+         const isMorningShift = shift.type === 'morning';
 
          parsedTimes.forEach(pt => {
             if (!pt) return;
@@ -339,6 +340,20 @@ export const parseExcelData = (data: any[][]): Employee[] => {
                   amIn = `${dh}:${m.toString().padStart(2, '0')}`;
                }
             }
+         } else if (isMorningShift) {
+            const sevenAm = 7 * 60;
+            if (amInMins !== null && amInMins > sevenAm) {
+               const adjusted = amInMins - 30; // consideration adjustment
+               if (adjusted < sevenAm) {
+                  amInMins = sevenAm;
+                  amIn = '7:00';
+               } else {
+                  amInMins = adjusted;
+                  const h = Math.floor(adjusted / 60);
+                  const m = adjusted % 60;
+                  amIn = `${h}:${m.toString().padStart(2, '0')}`;
+               }
+            }
          } else {
             const eightAm = 8 * 60;
             if (amInMins !== null && amInMins > eightAm) {
@@ -355,7 +370,7 @@ export const parseExcelData = (data: any[][]): Employee[] => {
             }
          }
 
-         if (isFriday && !isAfternoonShift && !isNightShift) {
+         if (isFriday && !isAfternoonShift && !isNightShift && !isMorningShift) {
             if (amOut && amOutMins !== null && amOutMins < 12 * 60) {
                amOut = '12:00';
                amOutMins = 12 * 60;
@@ -385,8 +400,8 @@ export const parseExcelData = (data: any[][]): Employee[] => {
 
          if (isWeekday) {
             if (hasEmptyLogs) {
-               undertime = 480;
-               halfdayUndertime = 240;
+               undertime = isMorningShift ? 420 : 480;
+               halfdayUndertime = isMorningShift ? 300 : 240;
             } else if (isAfternoonShift) {
                // Afternoon Shift: amIn 3:00 PM (15:00), amOut 7:00 PM (19:00), pmIn 8:00 PM (20:00), pmOut 11:00 PM (23:00)
                const noAmIn = !amIn && !!amOut;
@@ -423,6 +438,24 @@ export const parseExcelData = (data: any[][]): Employee[] => {
 
                undertime = Math.min(480, lateMinutes + earlyOutMinutes + breakMinutes);
                halfdayUndertime = !amIn ? 240 : lateMinutes + (hdOutMins >= 0 && hdOutMins < 3 * 60 ? 3 * 60 - hdOutMins : 0);
+            } else if (isMorningShift) {
+               // Morning Shift: amIn 7:00 AM (420), amOut 12:00 PM (720), pmIn 1:00 PM (780), pmOut 3:00 PM (900)
+               const noAmIn = !amIn && !!amOut;
+               const lateMinutes = noAmIn ? 300 : (amInMins !== null && amInMins > 7 * 60)
+                  ? amInMins - 7 * 60
+                  : 0;
+
+               const noPmOut = !pmOut;
+               const earlyOutMinutes = noPmOut ? 120 : (pmOutMins !== null && pmOutMins < 15 * 60)
+                  ? 15 * 60 - pmOutMins
+                  : 0;
+
+               const lunchMinutes = !amOut && !pmIn ? 240 :
+                  (!noAmIn && amOutMins !== null ? Math.max(0, 12 * 60 - amOutMins) : 0) +
+                  (!noPmOut && pmInMins !== null ? Math.max(0, pmInMins - 13 * 60) : 0);
+
+               undertime = Math.min(420, lateMinutes + earlyOutMinutes + lunchMinutes);
+               halfdayUndertime = !amIn ? 300 : lateMinutes + (hdOutMins >= 0 ? Math.max(0, 12 * 60 - hdOutMins) : 0);
             } else {
                // 1. If amIn is later than 08:00, take the difference in minutes.
                //    No amIn but amOut present = whole morning (240) missing.

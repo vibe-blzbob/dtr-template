@@ -5,7 +5,7 @@ import { parseExcelData, type Employee } from '../utils/parser';
 import { SIGNATORIES, getCustomSignatories, saveCustomSignatories, type Signatory } from '../utils/signatories';
 import { DtrTemplate } from './DtrTemplate';
 import { Button } from '../../../components/Button';
-import { Upload, RefreshCcw, FileDown, ClipboardList, X, CalendarDays, Plus, Trash2, LogOut } from 'lucide-react';
+import { Upload, RefreshCcw, FileDown, ClipboardList, X, CalendarDays, Plus, Trash2, LogOut, Printer } from 'lucide-react';
 
 // ─── Holiday Picker Modal ────────────────────────────────────────────────────
 
@@ -271,6 +271,7 @@ export const DtrUploader: React.FC<DtrUploaderProps> = ({ onLogout }) => {
   const [holidays, setHolidays] = useState<Set<number>>(new Set());
   const [halfdays, setHalfdays] = useState<Set<number>>(new Set());
   const [showHolidayPicker, setShowHolidayPicker] = useState(false);
+  const [printingPageIndex, setPrintingPageIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const allSignatories = useMemo(() => [...SIGNATORIES, ...customSignatories], [customSignatories]);
@@ -332,8 +333,34 @@ export const DtrUploader: React.FC<DtrUploaderProps> = ({ onLogout }) => {
     }
   };
 
+  const handlePrintPage = (index: number) => {
+    setPrintingPageIndex(index);
+    setTimeout(async () => {
+      if (window.electronAPI) {
+        try {
+          const result = await window.electronAPI.print();
+          if (!result.success) {
+            console.error('Failed to print:', result.error);
+            alert('Failed to print: ' + result.error);
+          }
+        } finally {
+          setPrintingPageIndex(null);
+        }
+      } else {
+        const cleanup = () => {
+          setPrintingPageIndex(null);
+          window.removeEventListener('afterprint', cleanup);
+        };
+        window.addEventListener('afterprint', cleanup, { once: true });
+        window.print();
+        setTimeout(() => setPrintingPageIndex(null), 1000);
+      }
+    }, 50);
+  };
+
   const handleReset = () => {
     setEmployees([]);
+    setPrintingPageIndex(null);
     setYear(new Date().getFullYear());
     setMonth(new Date().getMonth());
     setSelectedSignatoryIndex(0);
@@ -554,26 +581,51 @@ export const DtrUploader: React.FC<DtrUploaderProps> = ({ onLogout }) => {
       {/* Print Preview Area */}
       {employees.length > 0 ? (
         <div className="bg-white dark:bg-gray-800 mx-auto print:mx-0 rounded-lg shadow-sm print:shadow-none p-8 print:p-0 max-w-[8.5in] w-full overflow-hidden print:overflow-visible transition-colors">
-          {printPages.map((pair, index) => (
-            <div
-              key={index}
-              className="flex flex-row justify-center page-break-after-always print:h-[10in] pt-4 print:pt-0"
-              style={{ pageBreakAfter: index < printPages.length - 1 ? 'always' : 'auto' }}
-            >
-              {pair.map((emp, copyIndex) => (
-                <DtrTemplate
-                  key={`${emp.name}-copy-${copyIndex}`}
-                  employee={emp}
-                  year={year}
-                  month={month}
-                  signatoryName={allSignatories[selectedSignatoryIndex]?.name || SIGNATORIES[0].name}
-                  signatoryPosition={allSignatories[selectedSignatoryIndex]?.position || SIGNATORIES[0].position}
-                  holidays={holidays}
-                  halfdays={halfdays}
-                />
-              ))}
-            </div>
-          ))}
+          {printPages.map((pair, index) => {
+            const isHiddenInPrint = printingPageIndex !== null && printingPageIndex !== index;
+            return (
+              <div
+                key={index}
+                className={`mb-10 print:mb-0 ${isHiddenInPrint ? 'print:hidden' : ''}`}
+              >
+                {/* Header bar above each preview page */}
+                <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-700/60 px-3 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 print:hidden mb-2">
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                    Page {index + 1} of {printPages.length} &bull; <strong className="font-semibold">{pair[0].name}</strong>
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePrintPage(index)}
+                    className="flex items-center gap-1.5 text-xs h-7 py-0 px-2.5 dark:border-gray-600 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300"
+                  >
+                    <Printer size={13} /> Print
+                  </Button>
+                </div>
+
+                <div
+                  className="flex flex-row justify-center page-break-after-always print:h-[10in] pt-2 print:pt-0"
+                  style={{
+                    pageBreakAfter: printingPageIndex !== null || index === printPages.length - 1 ? 'auto' : 'always',
+                    breakAfter: printingPageIndex !== null || index === printPages.length - 1 ? 'auto' : 'page',
+                  }}
+                >
+                  {pair.map((emp, copyIndex) => (
+                    <DtrTemplate
+                      key={`${emp.name}-copy-${copyIndex}`}
+                      employee={emp}
+                      year={year}
+                      month={month}
+                      signatoryName={allSignatories[selectedSignatoryIndex]?.name || SIGNATORIES[0].name}
+                      signatoryPosition={allSignatories[selectedSignatoryIndex]?.position || SIGNATORIES[0].position}
+                      holidays={holidays}
+                      halfdays={halfdays}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="max-w-4xl mx-auto text-center p-12 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 print:hidden transition-colors">

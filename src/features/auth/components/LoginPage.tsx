@@ -4,9 +4,10 @@ import { Lock } from 'lucide-react';
 
 interface LoginPageProps {
   onLogin: () => void;
+  timedOut?: boolean;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, timedOut }) => {
   const [passcode, setPasscode] = useState('');
   const [error, setError] = useState(false);
 
@@ -32,6 +33,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">DTR Template</h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter passcode to access converter</p>
         </div>
+
+        {timedOut && (
+          <div className="mb-4 p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-700 dark:text-amber-300 text-center">
+            Session timed out due to 30 minutes of inactivity. Please re-enter passcode.
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

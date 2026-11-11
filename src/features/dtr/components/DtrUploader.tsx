@@ -583,58 +583,55 @@ export const DtrUploader: React.FC<DtrUploaderProps> = ({ onLogout }) => {
         <div className="bg-white dark:bg-gray-800 mx-auto print:mx-0 rounded-lg shadow-sm print:shadow-none p-8 print:p-0 max-w-[8.5in] w-full overflow-hidden print:overflow-visible transition-colors">
           {printPages.map((pair, index) => {
             const isHiddenInPrint = printingPageIndex !== null && printingPageIndex !== index;
-            return (
-              <div
-                key={index}
-                className={`mb-10 print:mb-0 ${isHiddenInPrint ? 'print:hidden' : ''}`}
-              >
-                {/* Header bar above each preview page */}
-                <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-700/60 px-3 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 print:hidden mb-2">
-                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                    Page {index + 1} of {printPages.length} &bull; <strong className="font-semibold">{pair[0].name}</strong>
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePrintPage(index)}
-                    className="flex items-center gap-1.5 text-xs h-7 py-0 px-2.5 dark:border-gray-600 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300"
-                  >
-                    <Printer size={13} /> Print
-                  </Button>
-                </div>
+            const isLastInBatch = printingPageIndex === null && index === printPages.length - 1;
+            const shouldBreakAfter = !isLastInBatch;
 
+            return (
+              <React.Fragment key={index}>
                 <div
-                  className="flex flex-row justify-center page-break-after-always print:h-[10in] pt-2 print:pt-0"
-                  style={{
-                    pageBreakAfter: (printingPageIndex === null && index === printPages.length - 1) ? 'auto' : 'always',
-                    breakAfter: (printingPageIndex === null && index === printPages.length - 1) ? 'auto' : 'page',
-                  }}
+                  className={`dtr-page-card mb-10 print:mb-0 ${shouldBreakAfter ? 'break-after-page' : ''} ${isHiddenInPrint ? 'print:hidden' : ''}`}
                 >
-                  {pair.map((emp, copyIndex) => (
-                    <DtrTemplate
-                      key={`${emp.name}-copy-${copyIndex}`}
-                      employee={emp}
-                      year={year}
-                      month={month}
-                      signatoryName={allSignatories[selectedSignatoryIndex]?.name || SIGNATORIES[0].name}
-                      signatoryPosition={allSignatories[selectedSignatoryIndex]?.position || SIGNATORIES[0].position}
-                      holidays={holidays}
-                      halfdays={halfdays}
-                    />
-                  ))}
+                  {/* Header bar above each preview page */}
+                  <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-700/60 px-3 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 print:hidden mb-2">
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Page {index + 1} of {printPages.length} &bull; <strong className="font-semibold">{pair[0].name}</strong>
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePrintPage(index)}
+                      className="flex items-center gap-1.5 text-xs h-7 py-0 px-2.5 dark:border-gray-600 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300"
+                    >
+                      <Printer size={13} /> Print
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-row justify-center print:h-[10.2in] print:max-h-[10.2in] pt-2 print:pt-0">
+                    {pair.map((emp, copyIndex) => (
+                      <DtrTemplate
+                        key={`${emp.name}-copy-${copyIndex}`}
+                        employee={emp}
+                        year={year}
+                        month={month}
+                        signatoryName={allSignatories[selectedSignatoryIndex]?.name || SIGNATORIES[0].name}
+                        signatoryPosition={allSignatories[selectedSignatoryIndex]?.position || SIGNATORIES[0].position}
+                        holidays={holidays}
+                        halfdays={halfdays}
+                      />
+                    ))}
+                  </div>
                 </div>
 
                 {/* Print-only blank second page when printing an individual employee page */}
                 {printingPageIndex === index && (
                   <div
-                    className="hidden print:block print:h-[10in] print:w-full"
-                    style={{ pageBreakAfter: 'auto', breakAfter: 'auto' }}
+                    className="dtr-page-card hidden print:block print:h-[10.2in] print:w-full"
                     aria-hidden="true"
                   >
                     &nbsp;
                   </div>
                 )}
-              </div>
+              </React.Fragment>
             );
           })}
         </div>
@@ -647,11 +644,18 @@ export const DtrUploader: React.FC<DtrUploaderProps> = ({ onLogout }) => {
 
       <style>{`
         @media print {
-          @page { size: letter portrait; margin: 10mm; }
+          @page { size: letter portrait; margin: 8mm; }
           html, body, #root { background-color: white !important; overflow: visible !important; }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .page-break-after-always { page-break-after: always; break-after: page; }
-          .page-break-after-always:last-child { page-break-after: auto !important; break-after: auto !important; }
+          .dtr-page-card {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            box-sizing: border-box !important;
+          }
+          .dtr-page-card.break-after-page {
+            break-after: page !important;
+            page-break-after: always !important;
+          }
           .ut-summary-modal { display: none !important; }
           .holiday-picker-modal { display: none !important; }
           .custom-signatory-modal { display: none !important; }

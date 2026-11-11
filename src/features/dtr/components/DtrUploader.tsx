@@ -5,7 +5,7 @@ import { parseExcelData, type Employee } from '../utils/parser';
 import { SIGNATORIES, getCustomSignatories, saveCustomSignatories, type Signatory } from '../utils/signatories';
 import { DtrTemplate } from './DtrTemplate';
 import { Button } from '../../../components/Button';
-import { Upload, RefreshCcw, FileDown, ClipboardList, X, CalendarDays, Plus, Trash2 } from 'lucide-react';
+import { Upload, RefreshCcw, FileDown, ClipboardList, X, CalendarDays, Plus, Trash2, LogOut } from 'lucide-react';
 
 // ─── Holiday Picker Modal ────────────────────────────────────────────────────
 
@@ -256,7 +256,11 @@ const CustomSignatoryModal: React.FC<CustomSignatoryModalProps> = ({
 
 // ─── DTR Uploader ────────────────────────────────────────────────────────────
 
-export const DtrUploader = () => {
+interface DtrUploaderProps {
+  onLogout?: () => void;
+}
+
+export const DtrUploader: React.FC<DtrUploaderProps> = ({ onLogout }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [month, setMonth] = useState<number>(new Date().getMonth());
@@ -385,9 +389,16 @@ export const DtrUploader = () => {
       <div className="max-w-5xl mx-auto mb-8 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg print:hidden transition-colors">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">DTR Template Converter</h1>
-          <Button variant="outline" onClick={handleReset} className="flex items-center gap-2 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
-            <RefreshCcw size={16} /> Reset
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleReset} className="flex items-center gap-2 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+              <RefreshCcw size={16} /> Reset
+            </Button>
+            {onLogout && (
+              <Button variant="outline" onClick={onLogout} className="flex items-center gap-2 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-950/30">
+                <LogOut size={16} /> Log Out
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

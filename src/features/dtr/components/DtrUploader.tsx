@@ -606,8 +606,8 @@ export const DtrUploader: React.FC<DtrUploaderProps> = ({ onLogout }) => {
                 <div
                   className="flex flex-row justify-center page-break-after-always print:h-[10in] pt-2 print:pt-0"
                   style={{
-                    pageBreakAfter: printingPageIndex !== null || index === printPages.length - 1 ? 'auto' : 'always',
-                    breakAfter: printingPageIndex !== null || index === printPages.length - 1 ? 'auto' : 'page',
+                    pageBreakAfter: (printingPageIndex === null && index === printPages.length - 1) ? 'auto' : 'always',
+                    breakAfter: (printingPageIndex === null && index === printPages.length - 1) ? 'auto' : 'page',
                   }}
                 >
                   {pair.map((emp, copyIndex) => (
@@ -623,6 +623,17 @@ export const DtrUploader: React.FC<DtrUploaderProps> = ({ onLogout }) => {
                     />
                   ))}
                 </div>
+
+                {/* Print-only blank second page when printing an individual employee page */}
+                {printingPageIndex === index && (
+                  <div
+                    className="hidden print:block print:h-[10in] print:w-full"
+                    style={{ pageBreakAfter: 'auto', breakAfter: 'auto' }}
+                    aria-hidden="true"
+                  >
+                    &nbsp;
+                  </div>
+                )}
               </div>
             );
           })}
